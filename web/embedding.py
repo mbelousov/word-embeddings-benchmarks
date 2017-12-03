@@ -45,7 +45,8 @@ class Embedding(object):
 
     def __setitem__(self, k, v):
         if not v.shape[0] == self.vectors.shape[1]:
-            raise RuntimeError("Please pass vector of len {}".format(self.vectors.shape[1]))
+            raise RuntimeError(
+                "Please pass vector of len {}".format(self.vectors.shape[1]))
 
         if k not in self.vocabulary:
             self.vocabulary.add(k)
@@ -88,11 +89,14 @@ class Embedding(object):
             return default
 
     def standardize_words(self, lower=False, clean_words=False, inplace=False):
-        tw = self.transform_words(partial(standardize_string, lower=lower, clean_words=clean_words), inplace=inplace,
-                                  lower=lower)
+        tw = self.transform_words(
+            partial(standardize_string, lower=lower, clean_words=clean_words),
+            inplace=inplace,
+            lower=lower)
 
         if clean_words:
-            tw = tw.transform_words(partial(lambda w: w.strip(" ")), inplace=inplace, lower=lower)
+            tw = tw.transform_words(partial(lambda w: w.strip(" ")),
+                                    inplace=inplace, lower=lower)
         return tw
 
     def transform_words(self, f, inplace=False, lower=False):
@@ -180,7 +184,8 @@ class Embedding(object):
                     id_map[fw] = id
 
                     words_len[fw] = len(w)
-                elif not is_vocab_generic and counter_of_words[id] == counts[fw] and len(w) < words_len[fw]:
+                elif not is_vocab_generic and counter_of_words[id] == counts[
+                    fw] and len(w) < words_len[fw]:
                     id_map[fw] = id
 
                     counts[fw] = counter_of_words[id]
@@ -201,7 +206,8 @@ class Embedding(object):
             words = sorted(id_map.keys(), key=lambda x: id_map[x])
             vectors = curr_vec[[id_map[w] for w in words]]
 
-        logger.info("Transformed {} into {} words".format(word_count, len(words)))
+        logger.info(
+            "Transformed {} into {} words".format(word_count, len(words)))
 
         if inplace:
             self.vectors = vectors
@@ -209,7 +215,8 @@ class Embedding(object):
 
             return self
         else:
-            return Embedding(vectors=vectors, vocabulary=self.vocabulary.__class__(words))
+            return Embedding(vectors=vectors,
+                             vocabulary=self.vocabulary.__class__(words))
 
     def most_frequent(self, k, inplace=False):
         """Only most frequent k words to be included in the embeddings."""
@@ -277,14 +284,17 @@ class Embedding(object):
         for w in exclude:
             D[self.vocabulary.word_id[w]] = D.max()
 
-        return [self.vocabulary.id_word[id] for id in D.argsort(axis=0).flatten()[0:k]]
+        return [self.vocabulary.id_word[id] for id in
+                D.argsort(axis=0).flatten()[0:k]]
 
     @staticmethod
-    def from_gensim(model):
+    def from_gensim(model, standardize=False):
         word_count = {}
         vectors = []
-        for word, vocab in sorted(iteritems(model.vocab), key=lambda item: -item[1].count):
-            word = standardize_string(word)
+        for word, vocab in sorted(iteritems(model.vocab),
+                                  key=lambda item: -item[1].count):
+            if standardize:
+                word = standardize_string(word)
             if word:
                 vectors.append(model.syn0[vocab.index])
                 word_count[word] = vocab.count
@@ -308,8 +318,10 @@ class Embedding(object):
         with _open(fname, 'rb') as fin:
             words = []
             header = fin.readline()
-            vocab_size, layer1_size = list(map(int, header.split()))  # throws for invalid file format
-            logger.info("Loading #{} words with {} dim".format(vocab_size, layer1_size))
+            vocab_size, layer1_size = list(
+                map(int, header.split()))  # throws for invalid file format
+            logger.info(
+                "Loading #{} words with {} dim".format(vocab_size, layer1_size))
             vectors = np.zeros((vocab_size, layer1_size), dtype=np.float32)
             binary_len = np.dtype("float32").itemsize * layer1_size
             for line_no in range(vocab_size):
@@ -323,10 +335,12 @@ class Embedding(object):
                         word.append(ch)
 
                 words.append(b''.join(word).decode("latin-1"))
-                vectors[line_no, :] = np.fromstring(fin.read(binary_len), dtype=np.float32)
+                vectors[line_no, :] = np.fromstring(fin.read(binary_len),
+                                                    dtype=np.float32)
 
             if len(words) < vocab_size:
-                logger.warning("Omitted {} words".format(vocab_size - len(words)))
+                logger.warning(
+                    "Omitted {} words".format(vocab_size - len(words)))
             elif len(words) > vocab_size:
                 raise RuntimeError("Read too many words, incorrect file")
 
@@ -339,8 +353,10 @@ class Embedding(object):
 
             header = fin.readline()
             ignored = 0
-            vocab_size, layer1_size = list(map(int, header.split()))  # throws for invalid file format
-            vectors = np.zeros(shape=(vocab_size, layer1_size), dtype=np.float32)
+            vocab_size, layer1_size = list(
+                map(int, header.split()))  # throws for invalid file format
+            vectors = np.zeros(shape=(vocab_size, layer1_size),
+                               dtype=np.float32)
             for line_no, line in enumerate(fin):
                 try:
                     parts = text_type(line, encoding="utf-8").split(' ')
@@ -355,26 +371,32 @@ class Embedding(object):
                     parts.insert(0, w)
 
                 except Exception as e:
-                    logger.warning("We ignored line number {} because of errors in parsing"
-                                   "\n{}".format(line_no, e))
+                    logger.warning(
+                        "We ignored line number {} because of errors in parsing"
+                        "\n{}".format(line_no, e))
                     continue
 
                 # We differ from Gensim implementation.
                 # Our assumption that a difference of one happens because of having a
                 # space in the word.
                 if len(parts) == layer1_size + 1:
-                    word, vectors[line_no - ignored] = parts[0], list(map(np.float32, parts[1:]))
+                    word, vectors[line_no - ignored] = parts[0], list(
+                        map(np.float32, parts[1:]))
                 elif len(parts) == layer1_size + 2 and parts[-1]:
                     # last element after splitting is not empty- some glove corpora have additional space
-                    word, vectors[line_no - ignored] = parts[:2], list(map(np.float32, parts[2:]))
+                    word, vectors[line_no - ignored] = parts[:2], list(
+                        map(np.float32, parts[2:]))
                     word = u" ".join(word)
                 elif not parts[-1]:
                     # omit last value - empty string
-                    word, vectors[line_no - ignored] = parts[0], list(map(np.float32, parts[1:-1]))
+                    word, vectors[line_no - ignored] = parts[0], list(
+                        map(np.float32, parts[1:-1]))
                 else:
                     ignored += 1
-                    logger.warning("We ignored line number {} because of unrecognized "
-                                   "number of columns {}".format(line_no, parts[:-layer1_size]))
+                    logger.warning(
+                        "We ignored line number {} because of unrecognized "
+                        "number of columns {}".format(line_no,
+                                                      parts[:-layer1_size]))
                     continue
 
                 words.append(word)
@@ -383,7 +405,8 @@ class Embedding(object):
                 vectors = vectors[0:-ignored]
 
             if len(words) < vocab_size:
-                logger.warning("Omitted {} words".format(vocab_size - len(words)))
+                logger.warning(
+                    "Omitted {} words".format(vocab_size - len(words)))
             elif len(words) > vocab_size:
                 raise RuntimeError("Read too many words, incorrect file")
 
@@ -410,33 +433,39 @@ class Embedding(object):
                 except Exception as e:
                     ignored += 1
 
-                    logger.warning("We ignored line number {} because of errors in parsing"
-                                   "\n{}".format(line_no, e))
+                    logger.warning(
+                        "We ignored line number {} because of errors in parsing"
+                        "\n{}".format(line_no, e))
                     continue
 
                 try:
                     if parts[0] not in words_uniq:
-                        word, vectors[line_no - ignored] = parts[0], list(parts[len(parts) - dim:])
+                        word, vectors[line_no - ignored] = parts[0], list(
+                            parts[len(parts) - dim:])
                         words.append(word)
                         words_uniq.add(word)
                     else:
                         ignored += 1
                         logger.warning(
-                            "We ignored line number {} - following word is duplicated in file:\n{}\n".format(line_no,
-                                                                                                             parts[0]))
+                            "We ignored line number {} - following word is duplicated in file:\n{}\n".format(
+                                line_no,
+                                parts[0]))
 
                 except Exception as e:
                     ignored += 1
-                    logger.warning("We ignored line number {} because of errors in parsing"
-                                   "\n{}".format(line_no, e))
+                    logger.warning(
+                        "We ignored line number {} because of errors in parsing"
+                        "\n{}".format(line_no, e))
 
-            return Embedding(vocabulary=OrderedVocabulary(words), vectors=vectors[0:len(words)])
+            return Embedding(vocabulary=OrderedVocabulary(words),
+                             vectors=vectors[0:len(words)])
 
     @staticmethod
     def from_dict(d):
         for k in d:  # Standardize
             d[k] = np.array(d[k]).flatten()
-        return Embedding(vectors=list(d.values()), vocabulary=Vocabulary(d.keys()))
+        return Embedding(vectors=list(d.values()),
+                         vocabulary=Vocabulary(d.keys()))
 
     @staticmethod
     def to_word2vec(w, fname, binary=False):
@@ -451,15 +480,18 @@ class Embedding(object):
         fname: string
           Destination file
         """
-        logger.info("storing %sx%s projection weights into %s" % (w.vectors.shape[0], w.vectors.shape[1], fname))
+        logger.info("storing %sx%s projection weights into %s" % (
+        w.vectors.shape[0], w.vectors.shape[1], fname))
         with _open(fname, 'wb') as fout:
             fout.write(to_utf8("%s %s\n" % w.vectors.shape))
             # store in sorted order: most frequent words at the top
             for word, vector in zip(w.vocabulary.words, w.vectors):
                 if binary:
-                    fout.write(to_utf8(word) + b" " + vector.astype("float32").tostring())
+                    fout.write(to_utf8(word) + b" " + vector.astype(
+                        "float32").tostring())
                 else:
-                    fout.write(to_utf8("%s %s\n" % (word, ' '.join("%.15f" % val for val in vector))))
+                    fout.write(to_utf8("%s %s\n" % (
+                    word, ' '.join("%.15f" % val for val in vector))))
 
     @staticmethod
     def from_word2vec(fname, fvocab=None, binary=False):
