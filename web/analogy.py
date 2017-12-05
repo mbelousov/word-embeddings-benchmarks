@@ -16,6 +16,7 @@ from .datasets.analogy import *
 from .utils import batched
 from web.embedding import Embedding
 
+
 class SimpleAnalogySolver(sklearn.base.BaseEstimator):
     """
     Answer analogy questions
@@ -41,10 +42,11 @@ class SimpleAnalogySolver(sklearn.base.BaseEstimator):
     To speed up code consider installing OpenBLAS and setting OMP_NUM_THREADS.
     """
 
-    def __init__(self, w, method="add", batch_size=300, k=None):
+    def __init__(self, w, method="add", batch_size=300, k=None, top_k=1):
         self.w = w
         self.batch_size = batch_size
         self.method = method
+        self.top_k = max(top_k, 1)
         self.k = k
 
     def score(self, X, y):
@@ -92,15 +94,19 @@ class SimpleAnalogySolver(sklearn.base.BaseEstimator):
                 if query_word not in word_id:
                     missing_words += 1
         if missing_words > 0:
-            logger.warning("Missing {} words. Will replace them with mean vector".format(missing_words))
+            logger.warning(
+                "Missing {} words. Will replace them with mean vector".format(
+                    missing_words))
 
         # Batch due to memory constaints (in dot operation)
-        for id_batch, batch in enumerate(batched(range(len(X)), self.batch_size)):
+        for id_batch, batch in enumerate(
+                batched(range(len(X)), self.batch_size)):
             ids = list(batch)
             X_b = X[ids]
             if id_batch % np.floor(len(X) / (10. * self.batch_size)) == 0:
-                logger.info("Processing {}/{} batch".format(int(np.ceil(ids[1] / float(self.batch_size))),
-                                                            int(np.ceil(X.shape[0] / float(self.batch_size)))))
+                logger.info("Processing {}/{} batch".format(
+                    int(np.ceil(ids[1] / float(self.batch_size))),
+                    int(np.ceil(X.shape[0] / float(self.batch_size)))))
 
             A, B, C = np.vstack(w.get(word, mean_vector) for word in X_b[:, 0]), \
                       np.vstack(w.get(word, mean_vector) for word in X_b[:, 1]), \
@@ -120,7 +126,11 @@ class SimpleAnalogySolver(sklearn.base.BaseEstimator):
             for id, row in enumerate(X_b):
                 D[[w.vocabulary.word_id[r] for r in row if r in
                    w.vocabulary.word_id], id] = np.finfo(np.float32).min
-
-            output.append([words[id] for id in D.argmax(axis=0)])
+            if self.top_k > 1:
+                best_idx = D.argsort(axis=0)[-self.top_k:][::-1].T
+                output.append([[words[id] for id in best]
+                               for best in best_idx])
+            else:
+                output.append([words[id] for id in D.argmax(axis=0)])
 
         return np.array([item for sublist in output for item in sublist])

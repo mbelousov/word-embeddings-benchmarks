@@ -5,14 +5,17 @@
 import logging
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering, KMeans
-from .datasets.similarity import fetch_MEN, fetch_WS353, fetch_SimLex999, fetch_MTurk, fetch_RG65, fetch_RW
-from .datasets.categorization import fetch_AP, fetch_battig, fetch_BLESS, fetch_ESSLI_1a, fetch_ESSLI_2b, \
+from .datasets.similarity import fetch_MEN, fetch_WS353, fetch_SimLex999, \
+    fetch_MTurk, fetch_RG65, fetch_RW
+from .datasets.categorization import fetch_AP, fetch_battig, fetch_BLESS, \
+    fetch_ESSLI_1a, fetch_ESSLI_2b, \
     fetch_ESSLI_2c
 from web.analogy import *
 from six import iteritems
 from web.embedding import Embedding
 
 logger = logging.getLogger(__name__)
+
 
 def calculate_purity(y_true, y_pred):
     """
@@ -86,33 +89,42 @@ def evaluate_categorization(w, X, y, method="all", seed=None):
 
     mean_vector = np.mean(w.vectors, axis=0, keepdims=True)
     words = np.vstack(w.get(word, mean_vector) for word in X.flatten())
-    ids = np.random.RandomState(seed).choice(range(len(X)), len(X), replace=False)
+    ids = np.random.RandomState(seed).choice(range(len(X)), len(X),
+                                             replace=False)
 
     # Evaluate clustering on several hyperparameters of AgglomerativeClustering and
     # KMeans
     best_purity = 0
 
     if method == "all" or method == "agglomerative":
-        best_purity = calculate_purity(y[ids], AgglomerativeClustering(n_clusters=len(set(y)),
-                                                                       affinity="euclidean",
-                                                                       linkage="ward").fit_predict(words[ids]))
-        logger.debug("Purity={:.3f} using affinity={} linkage={}".format(best_purity, 'euclidean', 'ward'))
+        best_purity = calculate_purity(y[ids], AgglomerativeClustering(
+            n_clusters=len(set(y)),
+            affinity="euclidean",
+            linkage="ward").fit_predict(words[ids]))
+        logger.debug(
+            "Purity={:.3f} using affinity={} linkage={}".format(best_purity,
+                                                                'euclidean',
+                                                                'ward'))
         for affinity in ["cosine", "euclidean"]:
             for linkage in ["average", "complete"]:
-                purity = calculate_purity(y[ids], AgglomerativeClustering(n_clusters=len(set(y)),
-                                                                          affinity=affinity,
-                                                                          linkage=linkage).fit_predict(words[ids]))
-                logger.debug("Purity={:.3f} using affinity={} linkage={}".format(purity, affinity, linkage))
+                purity = calculate_purity(y[ids], AgglomerativeClustering(
+                    n_clusters=len(set(y)),
+                    affinity=affinity,
+                    linkage=linkage).fit_predict(words[ids]))
+                logger.debug(
+                    "Purity={:.3f} using affinity={} linkage={}".format(purity,
+                                                                        affinity,
+                                                                        linkage))
                 best_purity = max(best_purity, purity)
 
     if method == "all" or method == "kmeans":
-        purity = calculate_purity(y[ids], KMeans(random_state=seed, n_init=10, n_clusters=len(set(y))).
+        purity = calculate_purity(y[ids], KMeans(random_state=seed, n_init=10,
+                                                 n_clusters=len(set(y))).
                                   fit_predict(words[ids]))
         logger.debug("Purity={:.3f} using KMeans".format(purity))
         best_purity = max(purity, best_purity)
 
     return best_purity
-
 
 
 def evaluate_on_semeval_2012_2(w):
@@ -140,14 +152,22 @@ def evaluate_on_semeval_2012_2(w):
     for c in categories:
         # Get mean of left and right vector
         prototypes = data.X_prot[c]
-        prot_left = np.mean(np.vstack(w.get(word, mean_vector) for word in prototypes[:, 0]), axis=0)
-        prot_right = np.mean(np.vstack(w.get(word, mean_vector) for word in prototypes[:, 1]), axis=0)
+        prot_left = np.mean(
+            np.vstack(w.get(word, mean_vector) for word in prototypes[:, 0]),
+            axis=0)
+        prot_right = np.mean(
+            np.vstack(w.get(word, mean_vector) for word in prototypes[:, 1]),
+            axis=0)
 
         questions = data.X[c]
-        question_left, question_right = np.vstack(w.get(word, mean_vector) for word in questions[:, 0]), \
-                                        np.vstack(w.get(word, mean_vector) for word in questions[:, 1])
+        question_left, question_right = np.vstack(
+            w.get(word, mean_vector) for word in questions[:, 0]), \
+                                        np.vstack(
+                                            w.get(word, mean_vector) for word in
+                                            questions[:, 1])
 
-        scores = np.dot(prot_left - prot_right, (question_left - question_right).T)
+        scores = np.dot(prot_left - prot_right,
+                        (question_left - question_right).T)
 
         c_name = data.categories_names[c].split("_")[0]
         # NaN happens when there are only 0s, which might happen for very rare words or
@@ -156,13 +176,15 @@ def evaluate_on_semeval_2012_2(w):
         results[c_name].append(0 if np.isnan(cor) else cor)
 
     final_results = OrderedDict()
-    final_results['all'] = sum(sum(v) for v in results.values()) / len(categories)
+    final_results['all'] = sum(sum(v) for v in results.values()) / len(
+        categories)
     for k in results:
         final_results[k] = sum(results[k]) / len(results[k])
     return pd.Series(final_results)
 
 
-def evaluate_analogy(w, X, y, method="add", k=None, category=None, batch_size=100):
+def evaluate_analogy(w, X, y, method="add", k=None, category=None,
+                     batch_size=100, top_k=1):
     """
     Simple method to score embedding using SimpleAnalogySolver
 
@@ -201,26 +223,38 @@ def evaluate_analogy(w, X, y, method="add", k=None, category=None, batch_size=10
     if isinstance(w, dict):
         w = Embedding.from_dict(w)
 
-    assert category is None or len(category) == y.shape[0], "Passed incorrect category list"
+    assert category is None or len(category) == y.shape[
+        0], "Passed incorrect category list"
 
-    solver = SimpleAnalogySolver(w=w, method=method, batch_size=batch_size, k=k)
+    def pred_match(actual, pred):
+        return np.array([actual[i] in  pred[i]
+                         for i in xrange(len(actual))])
+
+
+    solver = SimpleAnalogySolver(w=w, method=method, batch_size=batch_size,
+                                 k=k, top_k=top_k)
     y_pred = solver.predict(X)
 
     if category is not None:
-        results = OrderedDict({"all": np.mean(y_pred == y)})
+        results = OrderedDict({"all": np.mean(pred_match(y, y_pred))})
         count = OrderedDict({"all": len(y_pred)})
-        correct = OrderedDict({"all": np.sum(y_pred == y)})
+        correct = OrderedDict({"all": np.sum(pred_match(y, y_pred))})
         for cat in set(category):
-            results[cat] = np.mean(y_pred[category == cat] == y[category == cat])
+            # results[cat] = np.mean(
+            #     y_pred[category == cat] == y[category == cat])
+            results[cat] = np.mean(pred_match(y[category == cat],
+                                              y_pred[category == cat]))
+
             count[cat] = np.sum(category == cat)
-            correct[cat] = np.sum(y_pred[category == cat] == y[category == cat])
+            correct[cat] = np.sum(pred_match(y[category == cat],
+                                             y_pred[category == cat]))
 
         return pd.concat([pd.Series(results, name="accuracy"),
                           pd.Series(correct, name="correct"),
                           pd.Series(count, name="count")],
                          axis=1)
     else:
-        return np.mean(y_pred == y)
+        return np.mean(pred_match(y, y_pred))
 
 
 def evaluate_on_WordRep(w, max_pairs=1000, solver_kwargs={}):
@@ -258,8 +292,14 @@ def evaluate_on_WordRep(w, max_pairs=1000, solver_kwargs={}):
         X_cat = data.X[data.category == cat]
         X_cat = X_cat[0:max_pairs]
 
-        logger.info("Processing {} with {} pairs, {} questions".format(cat, X_cat.shape[0]
-                                                                       , X_cat.shape[0] * (X_cat.shape[0] - 1)))
+        logger.info("Processing {} with {} pairs, {} questions".format(cat,
+                                                                       X_cat.shape[
+                                                                           0]
+                                                                       ,
+                                                                       X_cat.shape[
+                                                                           0] * (
+                                                                           X_cat.shape[
+                                                                               0] - 1)))
 
         # For each category construct question-answer pairs
         size = X_cat.shape[0] * (X_cat.shape[0] - 1)
@@ -281,13 +321,17 @@ def evaluate_on_WordRep(w, max_pairs=1000, solver_kwargs={}):
         accuracy[cat] = float(np.sum(y_pred == y)) / size
 
     # Add summary results
-    correct['wikipedia'] = sum(correct[c] for c in categories if c in data.wikipedia_categories)
+    correct['wikipedia'] = sum(
+        correct[c] for c in categories if c in data.wikipedia_categories)
     correct['all'] = sum(correct[c] for c in categories)
-    correct['wordnet'] = sum(correct[c] for c in categories if c in data.wordnet_categories)
+    correct['wordnet'] = sum(
+        correct[c] for c in categories if c in data.wordnet_categories)
 
-    count['wikipedia'] = sum(count[c] for c in categories if c in data.wikipedia_categories)
+    count['wikipedia'] = sum(
+        count[c] for c in categories if c in data.wikipedia_categories)
     count['all'] = sum(count[c] for c in categories)
-    count['wordnet'] = sum(count[c] for c in categories if c in data.wordnet_categories)
+    count['wordnet'] = sum(
+        count[c] for c in categories if c in data.wordnet_categories)
 
     accuracy['wikipedia'] = correct['wikipedia'] / count['wikipedia']
     accuracy['all'] = correct['all'] / count['all']
@@ -329,13 +373,16 @@ def evaluate_similarity(w, X, y):
             if query_word not in words:
                 missing_words += 1
     if missing_words > 0:
-        logger.warning("Missing {} words. Will replace them with mean vector".format(missing_words))
-
+        logger.warning(
+            "Missing {} words. Will replace them with mean vector".format(
+                missing_words))
 
     mean_vector = np.mean(w.vectors, axis=0, keepdims=True)
     A = np.vstack(w.get(word, mean_vector) for word in X[:, 0])
     B = np.vstack(w.get(word, mean_vector) for word in X[:, 1])
-    scores = np.array([v1.dot(v2.T)/(np.linalg.norm(v1)*np.linalg.norm(v2)) for v1, v2 in zip(A, B)])
+    scores = np.array(
+        [v1.dot(v2.T) / (np.linalg.norm(v1) * np.linalg.norm(v2)) for v1, v2 in
+         zip(A, B)])
     return scipy.stats.spearmanr(scores, y).correlation
 
 
@@ -373,7 +420,9 @@ def evaluate_on_all(w):
 
     for name, data in iteritems(similarity_tasks):
         similarity_results[name] = evaluate_similarity(w, data.X, data.y)
-        logger.info("Spearman correlation of scores on {} {}".format(name, similarity_results[name]))
+        logger.info("Spearman correlation of scores on {} {}".format(name,
+                                                                     similarity_results[
+                                                                         name]))
 
     # Calculate results on analogy
     logger.info("Calculating analogy benchmarks")
@@ -386,10 +435,14 @@ def evaluate_on_all(w):
 
     for name, data in iteritems(analogy_tasks):
         analogy_results[name] = evaluate_analogy(w, data.X, data.y)
-        logger.info("Analogy prediction accuracy on {} {}".format(name, analogy_results[name]))
+        logger.info("Analogy prediction accuracy on {} {}".format(name,
+                                                                  analogy_results[
+                                                                      name]))
 
     analogy_results["SemEval2012_2"] = evaluate_on_semeval_2012_2(w)['all']
-    logger.info("Analogy prediction accuracy on {} {}".format("SemEval2012", analogy_results["SemEval2012_2"]))
+    logger.info("Analogy prediction accuracy on {} {}".format("SemEval2012",
+                                                              analogy_results[
+                                                                  "SemEval2012_2"]))
 
     # Calculate results on categorization
     logger.info("Calculating categorization benchmarks")
@@ -406,8 +459,11 @@ def evaluate_on_all(w):
 
     # Calculate results using helper function
     for name, data in iteritems(categorization_tasks):
-        categorization_results[name] = evaluate_categorization(w, data.X, data.y)
-        logger.info("Cluster purity on {} {}".format(name, categorization_results[name]))
+        categorization_results[name] = evaluate_categorization(w, data.X,
+                                                               data.y)
+        logger.info("Cluster purity on {} {}".format(name,
+                                                     categorization_results[
+                                                         name]))
 
     # Construct pd table
     cat = pd.DataFrame([categorization_results])
